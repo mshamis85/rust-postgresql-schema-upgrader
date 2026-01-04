@@ -7,6 +7,11 @@ repository = "https://github.com/mshamis/rust-postgresql-schema-upgrader"
 license = "MIT"
 keywords = ["postgres", "postgresql", "migration", "schema", "upgrader"]
 categories = ["database"]
+exclude = [
+    "tests/**/*",
+    ".gitignore",
+    ".github/**/*"
+]
 
 [dependencies]
 postgres = { version = "0.19.12", features = ["with-chrono-0_4"], optional = true }
