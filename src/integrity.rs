@@ -1,12 +1,15 @@
 use crate::UpgraderError;
-use crate::schema_loader::SchemaUpgrader;
 use crate::db_tracker::AppliedUpgrader;
+use crate::schema_loader::SchemaUpgrader;
 
 /// Verifies the integrity of the database schema by comparing file-based upgraders with applied ones.
-/// 
-/// This function assumes that both `files_upgraders` and `db_upgraders` are sorted by `file_id` 
+///
+/// This function assumes that both `files_upgraders` and `db_upgraders` are sorted by `file_id`
 /// and `upgrader_id` in ascending order.
-pub fn verify_integrity(files_upgraders: &[SchemaUpgrader], db_upgraders: &[AppliedUpgrader]) -> Result<(), UpgraderError> {
+pub fn verify_integrity(
+    files_upgraders: &[SchemaUpgrader],
+    db_upgraders: &[AppliedUpgrader],
+) -> Result<(), UpgraderError> {
     // Verify chronological order of application
     let mut prev_applied_on = None;
     for db_u in db_upgraders {
@@ -46,7 +49,7 @@ pub fn verify_integrity(files_upgraders: &[SchemaUpgrader], db_upgraders: &[Appl
                         )));
                     } else {
                         // File tuple > DB tuple.
-                        // This means the DB has an upgrader that is "before" the current File upgrader, 
+                        // This means the DB has an upgrader that is "before" the current File upgrader,
                         // but we didn't see it in the Files list (otherwise we would have matched it previously).
                         return Err(UpgraderError::ExecutionError(format!(
                             "Database contains an upgrader {}:{} that is missing from the migration files.",
@@ -69,21 +72,21 @@ pub fn verify_integrity(files_upgraders: &[SchemaUpgrader], db_upgraders: &[Appl
                         file_u.file_id, file_u.upgrader_id, file_u.description, db_u.description
                     )));
                 }
-            },
+            }
             (Some(_), None) => {
                 // More files than DB. This is normal (pending migrations).
                 return Ok(());
-            },
+            }
             (None, Some(_db_u)) => {
                 // More DB than files. This implies the codebase is older than the DB.
                 // However, we must ensure that we didn't just 'run out' of files while the DB continued
                 // sequentially. If the DB has {0:0, 0:1, 0:2} and files has {0:0, 0:1}, that implies 0:2 was deleted from files.
                 // The prompt says: "The only mismatch we allow are that the files are new and the database is old... If the database is new and the files are old (but they agree on the subset and there are no gaps in the middle) that's ok too."
-                
+
                 // If we are here, it means the subset matched perfectly so far.
                 // So the files are a strict prefix of the DB. This is valid per the requirements.
                 return Ok(());
-            },
+            }
             (None, None) => {
                 // Both finished. Exact match.
                 return Ok(());
@@ -97,7 +100,12 @@ mod tests {
     use super::*;
     use chrono::Utc;
 
-    fn create_schema_upgrader(file_id: i32, upgrader_id: i32, text: &str, desc: &str) -> SchemaUpgrader {
+    fn create_schema_upgrader(
+        file_id: i32,
+        upgrader_id: i32,
+        text: &str,
+        desc: &str,
+    ) -> SchemaUpgrader {
         SchemaUpgrader {
             file_id,
             upgrader_id,
@@ -106,7 +114,12 @@ mod tests {
         }
     }
 
-    fn create_applied_upgrader(file_id: i32, upgrader_id: i32, text: &str, desc: &str) -> AppliedUpgrader {
+    fn create_applied_upgrader(
+        file_id: i32,
+        upgrader_id: i32,
+        text: &str,
+        desc: &str,
+    ) -> AppliedUpgrader {
         AppliedUpgrader {
             file_id,
             upgrader_id,
@@ -137,18 +150,14 @@ mod tests {
             create_schema_upgrader(0, 1, "SQL2", "Desc2"),
             create_schema_upgrader(1, 0, "SQL3", "Desc3"),
         ];
-        let db = vec![
-            create_applied_upgrader(0, 0, "SQL1", "Desc1"),
-        ];
+        let db = vec![create_applied_upgrader(0, 0, "SQL1", "Desc1")];
         assert!(verify_integrity(&files, &db).is_ok());
     }
 
     #[test]
     fn test_integrity_happy_path_db_ahead_files_subset() {
         // This is the "Files are old" case, but they match the prefix.
-        let files = vec![
-            create_schema_upgrader(0, 0, "SQL1", "Desc1"),
-        ];
+        let files = vec![create_schema_upgrader(0, 0, "SQL1", "Desc1")];
         let db = vec![
             create_applied_upgrader(0, 0, "SQL1", "Desc1"),
             create_applied_upgrader(0, 1, "SQL2", "Desc2"),
@@ -160,7 +169,7 @@ mod tests {
     fn test_integrity_fail_description_changed() {
         let files = vec![create_schema_upgrader(0, 0, "SQL1", "New Desc")];
         let db = vec![create_applied_upgrader(0, 0, "SQL1", "Old Desc")];
-        
+
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
             UpgraderError::ExecutionError(msg) => assert!(msg.contains("Description has changed")),
@@ -172,7 +181,7 @@ mod tests {
     fn test_integrity_fail_text_changed() {
         let files = vec![create_schema_upgrader(0, 0, "New SQL", "Desc1")];
         let db = vec![create_applied_upgrader(0, 0, "Old SQL", "Desc1")];
-        
+
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
             UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
@@ -186,16 +195,14 @@ mod tests {
         // Files: (0,0)->A, (1,0)->B
         // DB:    (0,0)->B, (1,0)->A
         // This manifests as content mismatch on (0,0) first.
-        let files = vec![
-            create_schema_upgrader(0, 0, "SQL_A", "Desc_A"),
-        ];
-        let db = vec![
-            create_applied_upgrader(0, 0, "SQL_B", "Desc_B"),
-        ];
-        
+        let files = vec![create_schema_upgrader(0, 0, "SQL_A", "Desc_A")];
+        let db = vec![create_applied_upgrader(0, 0, "SQL_B", "Desc_B")];
+
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed") || msg.contains("Description has changed")),
+            UpgraderError::ExecutionError(msg) => assert!(
+                msg.contains("SQL content has changed") || msg.contains("Description has changed")
+            ),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -206,7 +213,7 @@ mod tests {
         // DB has 0:1. File has 1:0.
         // Files: (0,0), (1,0)
         // DB:    (0,0), (0,1)
-        
+
         let files = vec![
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
             create_schema_upgrader(1, 0, "SQL2", "Desc2"),
@@ -220,7 +227,9 @@ mod tests {
         // It compares (1,0) from files with (0,1) from DB.
         // (1,0) > (0,1). So DB has an upgrader "before" the current file upgrader.
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 0:1 that is missing from the migration files")),
+            UpgraderError::ExecutionError(msg) => assert!(msg.contains(
+                "Database contains an upgrader 0:1 that is missing from the migration files"
+            )),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -236,7 +245,9 @@ mod tests {
         let err = verify_integrity(&files, &db).unwrap_err();
         // (1,0) > (0,0). DB has earlier upgrader.
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 0:0 that is missing")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("Database contains an upgrader 0:0 that is missing"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
@@ -252,7 +263,9 @@ mod tests {
         let err = verify_integrity(&files, &db).unwrap_err();
         // (0,1) > (0,0)
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 0:0 that is missing")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("Database contains an upgrader 0:0 that is missing"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
@@ -266,14 +279,14 @@ mod tests {
             create_schema_upgrader(0, 0, "SQL_New", "Desc_New"),
             create_schema_upgrader(0, 1, "SQL_Old", "Desc_Old"),
         ];
-        let db = vec![
-            create_applied_upgrader(0, 0, "SQL_Old", "Desc_Old"),
-        ];
+        let db = vec![create_applied_upgrader(0, 0, "SQL_Old", "Desc_Old")];
 
         // Mismatch at (0,0). Content differs.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed") || msg.contains("Description has changed")),
+            UpgraderError::ExecutionError(msg) => assert!(
+                msg.contains("SQL content has changed") || msg.contains("Description has changed")
+            ),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -282,7 +295,7 @@ mod tests {
     fn test_integrity_fail_inserted_in_middle_file_gap() {
         // Files: (0,0), (0,1-New), (0,2-Old)
         // DB:    (0,0), (0,1-Old) -> Wait, if IDs shift, then DB 0:1 is Old, File 0:1 is New. Mismatch.
-        
+
         // Scenario: Developer inserts new upgrader, shifts IDs.
         let files = vec![
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
@@ -297,7 +310,9 @@ mod tests {
         // At 0:1, content mismatch.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed") || msg.contains("Description has changed")),
+            UpgraderError::ExecutionError(msg) => assert!(
+                msg.contains("SQL content has changed") || msg.contains("Description has changed")
+            ),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -307,7 +322,7 @@ mod tests {
         // Scenario: Developer adds 0:1, but keeps 0:2 (assuming no shift - rare manual edit).
         // Files: (0,0), (0,1), (0,2)
         // DB:    (0,0), (0,2)  <-- Missing 0:1
-        
+
         let files = vec![
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
             create_schema_upgrader(0, 1, "SQL2", "Desc2"),
@@ -322,7 +337,9 @@ mod tests {
         // (0,1) < (0,2). File is "earlier". Means DB skipped it.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")),
+            UpgraderError::ExecutionError(msg) => assert!(
+                msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")
+            ),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -335,9 +352,7 @@ mod tests {
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
             create_schema_upgrader(0, 1, "SQL2", "Desc2"),
         ];
-        let db = vec![
-            create_applied_upgrader(0, 0, "SQL1", "Desc1"),
-        ];
+        let db = vec![create_applied_upgrader(0, 0, "SQL1", "Desc1")];
         assert!(verify_integrity(&files, &db).is_ok());
     }
 
@@ -345,7 +360,7 @@ mod tests {
     fn test_integrity_fail_add_to_end_of_file_with_subsequent_exists() {
         // Files: (0,0), (0,1-New), (1,0)
         // DB:    (0,0), (1,0)  <-- DB already has 1:0, so 0:1 is a "gap" effectively because 1:0 > 0:1
-        
+
         let files = vec![
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
             create_schema_upgrader(0, 1, "SQL_New", "Desc_New"),
@@ -360,11 +375,13 @@ mod tests {
         // (0,1) < (1,0). Gap detected.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")),
+            UpgraderError::ExecutionError(msg) => assert!(
+                msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")
+            ),
             _ => panic!("Unexpected error type"),
         }
     }
-    
+
     #[test]
     fn test_integrity_happy_path_new_file() {
         // Files: (0,0), (1,0)
@@ -373,9 +390,7 @@ mod tests {
             create_schema_upgrader(0, 0, "SQL1", "Desc1"),
             create_schema_upgrader(1, 0, "SQL2", "Desc2"),
         ];
-        let db = vec![
-            create_applied_upgrader(0, 0, "SQL1", "Desc1"),
-        ];
+        let db = vec![create_applied_upgrader(0, 0, "SQL1", "Desc1")];
         assert!(verify_integrity(&files, &db).is_ok());
     }
 
@@ -385,7 +400,7 @@ mod tests {
     fn test_integrity_success_leading_trailing_whitespace_change() {
         let files = vec![create_schema_upgrader(0, 0, "  SQL  ", " Desc ")];
         let db = vec![create_applied_upgrader(0, 0, "SQL", "Desc")];
-        
+
         assert!(verify_integrity(&files, &db).is_ok());
     }
 
@@ -394,7 +409,7 @@ mod tests {
     fn test_integrity_fail_internal_whitespace_change() {
         let files = vec![create_schema_upgrader(0, 0, "SELECT  1", "Desc")];
         let db = vec![create_applied_upgrader(0, 0, "SELECT 1", "Desc")];
-        
+
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
             UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
@@ -406,7 +421,7 @@ mod tests {
     fn test_integrity_fail_case_sensitivity() {
         let files = vec![create_schema_upgrader(0, 0, "SELECT 1", "Desc")];
         let db = vec![create_applied_upgrader(0, 0, "select 1", "Desc")];
-        
+
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
             UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
@@ -432,7 +447,9 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("File upgrader 0:1 is missing")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("File upgrader 0:1 is missing"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
@@ -456,7 +473,9 @@ mod tests {
         // File has (0,2). DB has (0,1).
         // (0,2) > (0,1). Means DB has something "earlier".
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 0:1 that is missing")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("Database contains an upgrader 0:1 that is missing"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
@@ -475,7 +494,9 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 1:0 that is missing")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("Database contains an upgrader 1:0 that is missing"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
@@ -512,7 +533,9 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Integrity violation") && msg.contains("applied at")),
+            UpgraderError::ExecutionError(msg) => {
+                assert!(msg.contains("Integrity violation") && msg.contains("applied at"))
+            }
             _ => panic!("Unexpected error type"),
         }
     }
