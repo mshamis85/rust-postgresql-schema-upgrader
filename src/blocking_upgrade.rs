@@ -2,7 +2,7 @@ use crate::{UpgraderError, PostgresUpgraderOptions};
 #[cfg(feature = "tls")]
 use crate::SslMode;
 use crate::schema_loader::load_upgraders;
-use crate::db_tracker::blocking::{init_upgraders_table, lock_upgraders_table, load_applied_upgraders, record_upgrader};
+use crate::db_tracker::blocking::{init_upgraders_table, lock_upgraders_table, load_applied_upgraders, record_upgrader, create_schema_if_needed};
 use crate::integrity::verify_integrity;
 
 #[cfg(feature = "postgres")]
@@ -28,6 +28,14 @@ pub fn upgrade_blocking(upgraders_folder: impl AsRef<std::path::Path>, connectio
     #[cfg(not(feature = "tls"))]
     let mut client = Client::connect(connection_string, NoTls)
         .map_err(|e| UpgraderError::ConnectionError(e.to_string()))?;
+
+    // 0. Create Schema (Independent)
+    if options.create_schema {
+        if options.schema.is_none() {
+            return Err(UpgraderError::ExecutionError("create_schema is enabled but no schema name is provided.".to_string()));
+        }
+        create_schema_if_needed(&mut client, options.schema.as_deref())?;
+    }
 
     // 1. Initialize Table (Independent Transaction)
     init_upgraders_table(&mut client, options.schema.as_deref())?;

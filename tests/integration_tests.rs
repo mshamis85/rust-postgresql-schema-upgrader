@@ -2,8 +2,6 @@ mod common;
 
 use common::PostgresContainer;
 use postgresql_schema_upgrader::{upgrade_blocking, upgrade_async, PostgresUpgraderOptions, SslMode};
-use std::fs;
-use tempfile::tempdir;
 use postgres::{Client, NoTls};
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -11,14 +9,10 @@ use std::thread;
 #[test]
 fn test_basic_flow_blocking() {
     let container = PostgresContainer::start();
-    let dir = tempdir().unwrap();
-    let folder = dir.path();
-
-    // Create upgrader 0
-    common::create_dummy_upgrader(folder, "000_init.sql", 0, 0, "CREATE TABLE foo (id INT);");
-
+    
+    // Step 1: Initial Schema
     let options = PostgresUpgraderOptions::builder().build();
-    upgrade_blocking(folder, &container.connection_string, &options).unwrap();
+    upgrade_blocking("tests/data/basic_flow_step1", &container.connection_string, &options).unwrap();
 
     // Verify DB
     let mut client = Client::connect(&container.connection_string, NoTls).unwrap();
@@ -32,9 +26,8 @@ fn test_basic_flow_blocking() {
     assert_eq!(rows[0].get::<_, i32>("file_id"), 0);
     assert_eq!(rows[0].get::<_, i32>("upgrader_id"), 0);
 
-    // Add upgrader 1
-    common::create_dummy_upgrader(folder, "001_bar.sql", 1, 0, "CREATE TABLE bar (id INT);");
-    upgrade_blocking(folder, &container.connection_string, &options).unwrap();
+    // Step 2: Add second file
+    upgrade_blocking("tests/data/basic_flow_step2", &container.connection_string, &options).unwrap();
 
     let rows = client.query("SELECT * FROM \"$upgraders$\"", &[]).unwrap();
     assert_eq!(rows.len(), 2);
@@ -42,13 +35,9 @@ fn test_basic_flow_blocking() {
 
 #[tokio::test] async fn test_basic_flow_async() {
     let container = PostgresContainer::start();
-    let dir = tempdir().unwrap();
-    let folder = dir.path();
-
-    common::create_dummy_upgrader(folder, "000_init.sql", 0, 0, "CREATE TABLE foo (id INT);");
 
     let options = PostgresUpgraderOptions::builder().build();
-    upgrade_async(folder, &container.connection_string, &options).await.unwrap();
+    upgrade_async("tests/data/basic_flow_step1", &container.connection_string, &options).await.unwrap();
 
     // Verify DB using tokio-postgres
     let (client, connection) = tokio_postgres::connect(&container.connection_string, tokio_postgres::NoTls).await.unwrap();
@@ -67,20 +56,16 @@ fn test_basic_flow_blocking() {
 #[test]
 fn test_schema_support() {
     let container = PostgresContainer::start();
-    let dir = tempdir().unwrap();
-    let folder = dir.path();
 
     // Create schema first
     let mut client = Client::connect(&container.connection_string, NoTls).unwrap();
     client.execute("CREATE SCHEMA my_schema", &[]).unwrap();
 
-    common::create_dummy_upgrader(folder, "000_init.sql", 0, 0, "CREATE TABLE {{SCHEMA}}.foo (id INT);");
-
     let options = PostgresUpgraderOptions::builder()
         .schema("my_schema")
         .build();
     
-    upgrade_blocking(folder, &container.connection_string, &options).unwrap();
+    upgrade_blocking("tests/data/schema_support", &container.connection_string, &options).unwrap();
 
     // Verify table in schema
     client.execute("SELECT * FROM my_schema.foo", &[]).expect("Table my_schema.foo should exist");
@@ -93,14 +78,9 @@ fn test_schema_support() {
 #[test]
 fn test_concurrency() {
     let container = PostgresContainer::start();
-    let dir = tempdir().unwrap();
-    let folder = dir.path();
-
-    // Create a slow upgrader to simulate work and ensure overlap
-    common::create_dummy_upgrader(folder, "000_init.sql", 0, 0, "SELECT pg_sleep(0.5); CREATE TABLE foo (id INT);");
+    let folder = "tests/data/concurrency";
 
     let connection_string = Arc::new(container.connection_string.clone());
-    let folder_path = Arc::new(folder.to_path_buf());
     
     let n_threads = 10;
     let mut handles = vec![];
@@ -108,7 +88,6 @@ fn test_concurrency() {
 
     for _ in 0..n_threads {
         let conn_str = connection_string.clone();
-        let f_path = folder_path.clone();
         let b = barrier.clone();
         
         handles.push(thread::spawn(move || {
@@ -116,7 +95,7 @@ fn test_concurrency() {
             let options = PostgresUpgraderOptions::builder().build();
             // We expect success because locks should serialize execution. 
             // If the library was naive, it might fail with "relation already exists" or duplicate inserts.
-            upgrade_blocking(&*f_path, &conn_str, &options)
+            upgrade_blocking(folder, &conn_str, &options)
         }));
     }
 
@@ -138,4 +117,29 @@ fn test_concurrency() {
     let mut client = Client::connect(&container.connection_string, NoTls).unwrap();
     let rows = client.query("SELECT * FROM \"$upgraders$\"", &[]).unwrap();
     assert_eq!(rows.len(), 1, "Should have exactly 1 upgrader recorded");
+}
+
+#[test]
+fn test_schema_auto_create() {
+    let container = PostgresContainer::start();
+    let schema_name = "auto_created_schema";
+
+    // Ensure schema does not exist yet
+    let mut client = Client::connect(&container.connection_string, NoTls).unwrap();
+    let rows = client.query("SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", &[&schema_name]).unwrap();
+    assert_eq!(rows.len(), 0, "Schema should not exist yet");
+
+    let options = PostgresUpgraderOptions::builder()
+        .schema(schema_name)
+        .create_schema(true)
+        .build();
+    
+    upgrade_blocking("tests/data/schema_auto_create", &container.connection_string, &options).unwrap();
+
+    // Verify schema exists
+    let rows = client.query("SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", &[&schema_name]).unwrap();
+    assert_eq!(rows.len(), 1, "Schema should have been created");
+
+    // Verify table in schema
+    client.execute(&format!("SELECT * FROM {}.test_table", schema_name), &[]).expect("Table should exist in new schema");
 }

@@ -25,6 +25,15 @@ pub mod blocking {
     use super::*;
     use postgres::GenericClient;
 
+    pub fn create_schema_if_needed(client: &mut impl GenericClient, schema: Option<&str>) -> Result<(), UpgraderError> {
+        if let Some(schema_name) = schema {
+            let sql = format!("CREATE SCHEMA IF NOT EXISTS \"{}\";", schema_name);
+            client.execute(&sql, &[])
+                .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create schema: {:?}", e)))?;
+        }
+        Ok(())
+    }
+
     pub fn init_upgraders_table(client: &mut postgres::Client, schema: Option<&str>) -> Result<(), UpgraderError> {
         let mut transaction = client.transaction()
              .map_err(|e| UpgraderError::ConnectionError(format!("Failed to start transaction: {}", e)))?;
@@ -102,6 +111,16 @@ pub mod blocking {
 pub mod async_tracker {
     use super::*;
     use tokio_postgres::GenericClient;
+
+    pub async fn create_schema_if_needed(client: &impl GenericClient, schema: Option<&str>) -> Result<(), UpgraderError> {
+        if let Some(schema_name) = schema {
+            let sql = format!("CREATE SCHEMA IF NOT EXISTS \"{}\";", schema_name);
+            client.execute(&sql, &[])
+                .await
+                .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create schema: {:?}", e)))?;
+        }
+        Ok(())
+    }
 
     pub async fn init_upgraders_table(client: &mut tokio_postgres::Client, schema: Option<&str>) -> Result<(), UpgraderError> {
         let transaction = client.transaction().await

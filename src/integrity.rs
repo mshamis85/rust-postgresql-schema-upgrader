@@ -7,6 +7,20 @@ use crate::db_tracker::AppliedUpgrader;
 /// This function assumes that both `files_upgraders` and `db_upgraders` are sorted by `file_id` 
 /// and `upgrader_id` in ascending order.
 pub fn verify_integrity(files_upgraders: &[SchemaUpgrader], db_upgraders: &[AppliedUpgrader]) -> Result<(), UpgraderError> {
+    // Verify chronological order of application
+    let mut prev_applied_on = None;
+    for db_u in db_upgraders {
+        if let Some(prev) = prev_applied_on {
+            if db_u.applied_on < prev {
+                return Err(UpgraderError::ExecutionError(format!(
+                    "Integrity violation: Upgrader {}:{} was applied at {}, which is before the previous upgrader ({})",
+                    db_u.file_id, db_u.upgrader_id, db_u.applied_on, prev
+                )));
+            }
+        }
+        prev_applied_on = Some(db_u.applied_on);
+    }
+
     let mut files_iter = files_upgraders.iter();
     let mut db_iter = db_upgraders.iter();
 
@@ -449,9 +463,6 @@ mod tests {
 
     #[test]
     fn test_integrity_fail_ghost_file_gap() {
-        // Files: (0,0), (2,0) <-- Missing File 1
-        // DB:    (0,0), (1,0), (2,0)
-        // Scenario: Developer deleted File 1 from disk.
         let files = vec![
             create_schema_upgrader(0, 0, "SQL0", "Desc0"),
             create_schema_upgrader(2, 0, "SQL2", "Desc2"),
@@ -463,9 +474,45 @@ mod tests {
         ];
 
         let err = verify_integrity(&files, &db).unwrap_err();
-        // File (2,0) vs DB (1,0).
         match err {
             UpgraderError::ExecutionError(msg) => assert!(msg.contains("Database contains an upgrader 1:0 that is missing")),
+            _ => panic!("Unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn test_integrity_fail_applied_on_out_of_order() {
+        use chrono::Duration;
+        let now = Utc::now();
+        let _later = now + Duration::seconds(10);
+        let earlier = now - Duration::seconds(10);
+
+        // DB: 0:0 applied NOW. 0:1 applied EARLIER. This is impossible in normal flow.
+        let files = vec![
+            create_schema_upgrader(0, 0, "SQL", "Desc"),
+            create_schema_upgrader(0, 1, "SQL", "Desc"),
+        ];
+        // Note: db_upgraders passed to verify_integrity are assumed sorted by ID.
+        let db = vec![
+            AppliedUpgrader {
+                file_id: 0,
+                upgrader_id: 0,
+                description: "Desc".to_string(),
+                text: "SQL".to_string(),
+                applied_on: now,
+            },
+            AppliedUpgrader {
+                file_id: 0,
+                upgrader_id: 1,
+                description: "Desc".to_string(),
+                text: "SQL".to_string(),
+                applied_on: earlier,
+            },
+        ];
+
+        let err = verify_integrity(&files, &db).unwrap_err();
+        match err {
+            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Integrity violation") && msg.contains("applied at")),
             _ => panic!("Unexpected error type"),
         }
     }

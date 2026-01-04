@@ -17,6 +17,7 @@ pub struct PostgresUpgraderOptions {
     #[cfg(feature = "tls")]
     pub(crate) ssl_mode: SslMode,
     pub(crate) schema: Option<String>,
+    pub(crate) create_schema: bool,
 }
 
 impl Default for PostgresUpgraderOptions {
@@ -25,6 +26,7 @@ impl Default for PostgresUpgraderOptions {
             #[cfg(feature = "tls")]
             ssl_mode: SslMode::default(),
             schema: None,
+            create_schema: false,
         }
     }
 }
@@ -48,6 +50,7 @@ pub struct PostgresUpgraderOptionsBuilder {
     #[cfg(feature = "tls")]
     ssl_mode: SslMode,
     schema: Option<String>,
+    create_schema: bool,
 }
 
 impl PostgresUpgraderOptionsBuilder {
@@ -62,11 +65,17 @@ impl PostgresUpgraderOptionsBuilder {
         self
     }
 
+    pub fn create_schema(mut self, create: bool) -> Self {
+        self.create_schema = create;
+        self
+    }
+
     pub fn build(self) -> PostgresUpgraderOptions {
         PostgresUpgraderOptions {
             #[cfg(feature = "tls")]
             ssl_mode: self.ssl_mode,
             schema: self.schema,
+            create_schema: self.create_schema,
         }
     }
 }
