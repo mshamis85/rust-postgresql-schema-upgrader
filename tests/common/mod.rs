@@ -87,3 +87,139 @@ impl Drop for PostgresContainer {
             .ok();
     }
 }
+
+pub struct TestUpgraderRow {
+    pub file_id: i32,
+    pub upgrader_id: i32,
+}
+
+pub struct BlockingTestClient {
+    client: postgres::Client,
+}
+
+impl BlockingTestClient {
+    pub fn connect(connection_string: &str) -> Self {
+        let client = postgres::Client::connect(connection_string, postgres::NoTls)
+            .expect("Failed to connect to Postgres");
+        Self { client }
+    }
+
+    pub fn execute(&mut self, sql: &str) {
+        self.client.execute(sql, &[]).expect("Failed to execute SQL");
+    }
+
+    pub fn ensure_schema_exists(&mut self, schema: &str) {
+        let sql = format!(
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = '{}'",
+            schema
+        );
+        let rows = self.client.query(&sql, &[]).expect("Query failed");
+        assert!(!rows.is_empty(), "Schema {} should exist", schema);
+    }
+
+    pub fn ensure_schema_does_not_exist(&mut self, schema: &str) {
+        let sql = format!(
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = '{}'",
+            schema
+        );
+        let rows = self.client.query(&sql, &[]).expect("Query failed");
+        assert!(rows.is_empty(), "Schema {} should NOT exist", schema);
+    }
+
+    pub fn ensure_table_exists(&mut self, table: &str, schema: Option<&str>) {
+        let table_ref = match schema {
+            Some(s) => format!("{}.{}", s, table),
+            None => table.to_string(),
+        };
+        self.client
+            .execute(&format!("SELECT * FROM {}", table_ref), &[])
+            .expect(&format!("Table {} should exist", table_ref));
+    }
+
+    pub fn get_upgraders(&mut self, schema: Option<&str>) -> Vec<TestUpgraderRow> {
+        let table_ref = match schema {
+            Some(s) => format!("\"{}\".\"$upgraders$\"", s),
+            None => "\"$upgraders$\"".to_string(),
+        };
+        let sql = format!("SELECT file_id, upgrader_id FROM {}", table_ref);
+        let rows = self.client.query(&sql, &[]).expect("Query failed");
+        rows.iter()
+            .map(|row| TestUpgraderRow {
+                file_id: row.get("file_id"),
+                upgrader_id: row.get("upgrader_id"),
+            })
+            .collect()
+    }
+}
+
+pub struct AsyncTestClient {
+    client: tokio_postgres::Client,
+}
+
+impl AsyncTestClient {
+    pub async fn connect(connection_string: &str) -> Self {
+        let (client, connection) =
+            tokio_postgres::connect(connection_string, tokio_postgres::NoTls)
+                .await
+                .expect("Failed to connect to Postgres");
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("connection error: {}", e);
+            }
+        });
+
+        Self { client }
+    }
+
+    pub async fn execute(&self, sql: &str) {
+        self.client
+            .execute(sql, &[])
+            .await
+            .expect("Failed to execute SQL");
+    }
+
+    pub async fn ensure_schema_exists(&self, schema: &str) {
+        let sql = format!(
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = '{}'",
+            schema
+        );
+        let rows = self.client.query(&sql, &[]).await.expect("Query failed");
+        assert!(!rows.is_empty(), "Schema {} should exist", schema);
+    }
+
+    pub async fn ensure_schema_does_not_exist(&self, schema: &str) {
+        let sql = format!(
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = '{}'",
+            schema
+        );
+        let rows = self.client.query(&sql, &[]).await.expect("Query failed");
+        assert!(rows.is_empty(), "Schema {} should NOT exist", schema);
+    }
+
+    pub async fn ensure_table_exists(&self, table: &str, schema: Option<&str>) {
+        let table_ref = match schema {
+            Some(s) => format!("{}.{}", s, table),
+            None => table.to_string(),
+        };
+        self.client
+            .execute(&format!("SELECT * FROM {}", table_ref), &[])
+            .await
+            .expect(&format!("Table {} should exist", table_ref));
+    }
+
+    pub async fn get_upgraders(&self, schema: Option<&str>) -> Vec<TestUpgraderRow> {
+        let table_ref = match schema {
+            Some(s) => format!("\"{}\".\"$upgraders$\"", s),
+            None => "\"$upgraders$\"".to_string(),
+        };
+        let sql = format!("SELECT file_id, upgrader_id FROM {}", table_ref);
+        let rows = self.client.query(&sql, &[]).await.expect("Query failed");
+        rows.iter()
+            .map(|row| TestUpgraderRow {
+                file_id: row.get("file_id"),
+                upgrader_id: row.get("upgrader_id"),
+            })
+            .collect()
+    }
+}
