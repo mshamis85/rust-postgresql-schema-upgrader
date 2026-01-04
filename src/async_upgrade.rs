@@ -1,13 +1,17 @@
-use crate::{UpgraderError, SslMode};
+use crate::{UpgraderError, PostgresUpgraderOptions};
+#[cfg(feature = "tls")]
+use crate::SslMode;
+use crate::schema_loader::load_upgraders;
 
 #[cfg(feature = "tokio-postgres")]
-pub async fn upgrade_async(upgraders_folder: impl AsRef<std::path::Path>, connection_string: &str, ssl_mode: SslMode) -> Result<(), UpgraderError> {
+pub async fn upgrade_async(upgraders_folder: impl AsRef<std::path::Path>, connection_string: &str, options: &PostgresUpgraderOptions) -> Result<(), UpgraderError> {
     use tokio_postgres::NoTls;
 
     #[cfg(feature = "tls")]
     use crate::tls::create_tls_config;
 
-    let client = match ssl_mode {
+    #[cfg(feature = "tls")]
+    let client = match options.ssl_mode {
         SslMode::Disable => {
             let (client, connection) = tokio_postgres::connect(connection_string, NoTls)
                 .await
@@ -21,31 +25,42 @@ pub async fn upgrade_async(upgraders_folder: impl AsRef<std::path::Path>, connec
             client
         },
         SslMode::Require => {
-            #[cfg(feature = "tls")]
-            {
-                let tls = create_tls_config()?;
-                let (client, connection) = tokio_postgres::connect(connection_string, tls)
-                    .await
-                    .map_err(|e| UpgraderError::ConnectionError(e.to_string()))?;
-                
-                tokio::spawn(async move {
-                    if let Err(_e) = connection.await {
-                        // Log error
-                    }
-                });
-                client
-            }
-            #[cfg(not(feature = "tls"))]
-            {
-                 return Err(UpgraderError::ConfigurationError("TLS feature is not enabled. Enable the 'tls' feature to use SslMode::Require.".to_string()));
-            }
+            let tls = create_tls_config()?;
+            let (client, connection) = tokio_postgres::connect(connection_string, tls)
+                .await
+                .map_err(|e| UpgraderError::ConnectionError(e.to_string()))?;
+            
+            tokio::spawn(async move {
+                if let Err(_e) = connection.await {
+                    // Log error
+                }
+            });
+            client
         }
     };
 
-    // Placeholder for upgrade logic
-    client.execute("SELECT 1", &[])
-        .await
-        .map_err(|e| UpgraderError::ExecutionError(e.to_string()))?;
+    #[cfg(not(feature = "tls"))]
+    let client = {
+         let (client, connection) = tokio_postgres::connect(connection_string, NoTls)
+            .await
+            .map_err(|e| UpgraderError::ConnectionError(e.to_string()))?;
+        
+        tokio::spawn(async move {
+            if let Err(_e) = connection.await {
+                // Log error
+            }
+        });
+        client
+    };
+
+    let upgraders = load_upgraders(upgraders_folder)?;
+
+    for upgrader in upgraders {
+        let sql = options.apply_schema_substitution(&upgrader.text);
+        client.batch_execute(&sql)
+            .await
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to execute upgrader {}: {}", upgrader.upgrader_id, e)))?;
+    }
 
     Ok(())
 }
