@@ -142,6 +142,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Command Line Interface (CLI)
+
+The library includes a CLI tool for managing migrations and verifying connections from the terminal.
+
+### Installation
+Install the CLI tool using cargo:
+```bash
+cargo install postgresql-schema-upgrader
+```
+
+### Usage
+
+#### Upgrade Schema
+Apply migrations from a directory:
+```bash
+# Using a connection string
+postgresql-schema-upgrader upgrade --connection-string "host=localhost user=postgres dbname=mydb" --path ./upgraders
+
+# Using individual parameters
+postgresql-schema-upgrader upgrade --host localhost --user postgres --database mydb --path ./upgraders
+
+# With optional schema and TLS
+postgresql-schema-upgrader upgrade --connection-string "..." --schema my_app --create-schema --tls
+```
+
+#### Check Connection
+Verify the database is reachable:
+```bash
+postgresql-schema-upgrader check-connection --connection-string "..."
+postgresql-schema-upgrader check-connection --host localhost --user postgres --database mydb --tls
+```
+
+### Environment Variables
+The CLI supports the following environment variables:
+- `DATABASE_URL`: Default for `--connection-string`
+- `PGPASSWORD`: Default for `--password`
+
 ### With TLS Support
 
 If you have the `tls` feature enabled, you can enforce SSL requirements:
