@@ -1,12 +1,14 @@
 mod tls;
 mod blocking;
 mod async_upgrade;
+mod schema_loader;
 
 #[derive(Debug)]
 pub enum UpgraderError {
     ConnectionError(String),
     ExecutionError(String),
     ConfigurationError(String),
+    LoaderError(String),
 }
 
 impl std::fmt::Display for UpgraderError {
@@ -15,6 +17,7 @@ impl std::fmt::Display for UpgraderError {
             UpgraderError::ConnectionError(msg) => write!(f, "Connection error: {}", msg),
             UpgraderError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
             UpgraderError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
+            UpgraderError::LoaderError(msg) => write!(f, "Loader error: {}", msg),
         }
     }
 }

@@ -15,3 +15,6 @@ webpki-roots = { version = "0.26", optional = true }
 postgres = ["dep:postgres"]
 tokio-postgres = ["dep:tokio-postgres", "dep:tokio"]
 tls = ["dep:tokio-postgres-rustls", "dep:rustls", "dep:webpki-roots"]
+
+[dev-dependencies]
+tempfile = "3.10"

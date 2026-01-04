@@ -1,7 +1,7 @@
 use crate::{UpgraderError, SslMode};
 
 #[cfg(feature = "postgres")]
-pub fn upgrade_blocking(connection_string: &str, ssl_mode: SslMode) -> Result<(), UpgraderError> {
+pub fn upgrade_blocking(upgraders_folder: impl AsRef<std::path::Path>, connection_string: &str, ssl_mode: SslMode) -> Result<(), UpgraderError> {
     use postgres::{Client, NoTls};
 
     #[cfg(feature = "tls")]

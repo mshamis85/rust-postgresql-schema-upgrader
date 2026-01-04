@@ -1,7 +1,7 @@
 use crate::{UpgraderError, SslMode};
 
 #[cfg(feature = "tokio-postgres")]
-pub async fn upgrade_async(connection_string: &str, ssl_mode: SslMode) -> Result<(), UpgraderError> {
+pub async fn upgrade_async(upgraders_folder: impl AsRef<std::path::Path>, connection_string: &str, ssl_mode: SslMode) -> Result<(), UpgraderError> {
     use tokio_postgres::NoTls;
 
     #[cfg(feature = "tls")]
