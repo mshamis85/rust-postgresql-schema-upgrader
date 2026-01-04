@@ -1,18 +1,14 @@
+/// SSL Mode for the PostgreSQL connection.
 #[cfg(feature = "tls")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SslMode {
+    #[default]
     Disable,
     Require,
 }
 
-#[cfg(feature = "tls")]
-impl Default for SslMode {
-    fn default() -> Self {
-        SslMode::Disable
-    }
-}
-
-#[derive(Debug, Clone)]
+/// Options for the PostgreSQL schema upgrader.
+#[derive(Debug, Clone, Default)]
 pub struct PostgresUpgraderOptions {
     #[cfg(feature = "tls")]
     pub(crate) ssl_mode: SslMode,
@@ -20,18 +16,8 @@ pub struct PostgresUpgraderOptions {
     pub(crate) create_schema: bool,
 }
 
-impl Default for PostgresUpgraderOptions {
-    fn default() -> Self {
-        Self {
-            #[cfg(feature = "tls")]
-            ssl_mode: SslMode::default(),
-            schema: None,
-            create_schema: false,
-        }
-    }
-}
-
 impl PostgresUpgraderOptions {
+    /// Returns a new builder for `PostgresUpgraderOptions`.
     pub fn builder() -> PostgresUpgraderOptionsBuilder {
         PostgresUpgraderOptionsBuilder::default()
     }
@@ -45,6 +31,7 @@ impl PostgresUpgraderOptions {
     }
 }
 
+/// A builder for `PostgresUpgraderOptions`.
 #[derive(Default)]
 pub struct PostgresUpgraderOptionsBuilder {
     #[cfg(feature = "tls")]
@@ -54,22 +41,26 @@ pub struct PostgresUpgraderOptionsBuilder {
 }
 
 impl PostgresUpgraderOptionsBuilder {
+    /// Sets the SSL mode for the connection.
     #[cfg(feature = "tls")]
     pub fn ssl_mode(mut self, ssl_mode: SslMode) -> Self {
         self.ssl_mode = ssl_mode;
         self
     }
 
+    /// Sets the target schema for migrations.
     pub fn schema(mut self, schema: impl Into<String>) -> Self {
         self.schema = Some(schema.into());
         self
     }
 
+    /// Whether to create the schema if it does not exist.
     pub fn create_schema(mut self, create: bool) -> Self {
         self.create_schema = create;
         self
     }
 
+    /// Builds a `PostgresUpgraderOptions` instance.
     pub fn build(self) -> PostgresUpgraderOptions {
         PostgresUpgraderOptions {
             #[cfg(feature = "tls")]
@@ -88,7 +79,7 @@ mod tests {
     fn test_builder_defaults() {
         let options = PostgresUpgraderOptions::builder().build();
         assert!(options.schema.is_none());
-        assert_eq!(options.create_schema, false);
+        assert!(!options.create_schema);
         #[cfg(feature = "tls")]
         assert_eq!(options.ssl_mode, SslMode::Disable);
     }
@@ -101,7 +92,7 @@ mod tests {
             .build();
 
         assert_eq!(options.schema.as_deref(), Some("my_schema"));
-        assert_eq!(options.create_schema, true);
+        assert!(options.create_schema);
     }
 
     #[test]

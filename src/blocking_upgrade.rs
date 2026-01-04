@@ -3,6 +3,15 @@ use crate::SslMode;
 use crate::upgrade_macros::{do_sync, run_upgrade_flow};
 use crate::{PostgresUpgraderOptions, UpgraderError};
 
+/// Synchronously applies schema upgrades from the specified folder to the database.
+///
+/// # Errors
+///
+/// Returns `UpgraderError` if:
+/// - Connection to the database fails.
+/// - Upgrader files cannot be loaded or are invalid.
+/// - An integrity violation is detected.
+/// - Execution of a migration step fails.
 #[cfg(feature = "postgres")]
 pub fn upgrade_blocking(
     upgraders_folder: impl AsRef<std::path::Path>,

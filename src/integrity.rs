@@ -13,13 +13,13 @@ pub fn verify_integrity(
     // Verify chronological order of application
     let mut prev_applied_on = None;
     for db_u in db_upgraders {
-        if let Some(prev) = prev_applied_on {
-            if db_u.applied_on < prev {
-                return Err(UpgraderError::ExecutionError(format!(
-                    "Integrity violation: Upgrader {}:{} was applied at {}, which is before the previous upgrader ({})",
-                    db_u.file_id, db_u.upgrader_id, db_u.applied_on, prev
-                )));
-            }
+        if let Some(prev) = prev_applied_on
+            && db_u.applied_on < prev
+        {
+            return Err(UpgraderError::ExecutionError(format!(
+                "Integrity violation: Upgrader {}:{} was applied at {}, which is before the previous upgrader ({})",
+                db_u.file_id, db_u.upgrader_id, db_u.applied_on, prev
+            )));
         }
         prev_applied_on = Some(db_u.applied_on);
     }

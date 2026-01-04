@@ -3,14 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
-pub struct SchemaUpgrader {
-    pub file_id: i32,
-    pub upgrader_id: i32,
-    pub description: String,
-    pub text: String,
+pub(crate) struct SchemaUpgrader {
+    pub(crate) file_id: i32,
+    pub(crate) upgrader_id: i32,
+    pub(crate) description: String,
+    pub(crate) text: String,
 }
 
-pub fn load_upgraders(
+pub(crate) fn load_upgraders(
     upgraders_folder: impl AsRef<Path>,
 ) -> Result<Vec<SchemaUpgrader>, UpgraderError> {
     let upgraders_folder = upgraders_folder.as_ref();
@@ -105,15 +105,15 @@ pub fn load_upgraders(
         let content = fs::read_to_string(&path).map_err(|e| {
             UpgraderError::LoaderError(format!("Failed to read file {:?}: {}", path, e))
         })?;
-        let mut lines = content.lines();
+        let lines = content.lines();
 
         let mut current_upgrader_id: Option<i32> = None;
         let mut current_description: Option<String> = None;
         let mut current_sql = String::new();
         let mut expected_upgrader_id = 0;
 
-        while let Some(line) = lines.next() {
-            if line.starts_with("--- ") {
+        for line in lines {
+            if let Some(header_part) = line.strip_prefix("--- ") {
                 // If we have a current upgrader, push it
                 if let (Some(uid), Some(desc)) = (current_upgrader_id, &current_description) {
                     let trimmed_sql = current_sql.trim().to_string();
@@ -131,7 +131,6 @@ pub fn load_upgraders(
                 current_sql.clear();
 
                 // Parse new header: "--- <id>: <desc>"
-                let header_part = &line[4..]; // Skip "--- "
                 if let Some((id_str, desc_str)) = header_part.split_once(':') {
                     if let Ok(uid) = id_str.trim().parse::<i32>() {
                         if uid != expected_upgrader_id {

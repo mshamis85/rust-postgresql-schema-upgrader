@@ -7,12 +7,12 @@ use crate::upgrade_macros::{
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
-pub struct AppliedUpgrader {
-    pub file_id: i32,
-    pub upgrader_id: i32,
-    pub description: String,
-    pub text: String,
-    pub applied_on: DateTime<Utc>,
+pub(crate) struct AppliedUpgrader {
+    pub(crate) file_id: i32,
+    pub(crate) upgrader_id: i32,
+    pub(crate) description: String,
+    pub(crate) text: String,
+    pub(crate) applied_on: DateTime<Utc>,
 }
 
 pub(crate) const ADVISORY_LOCK_ID: i64 = 42_00_42_00; // Arbitrary constant for serialization of CREATE TABLE
@@ -25,7 +25,7 @@ pub(crate) fn table_name(schema: Option<&str>) -> String {
 }
 
 #[cfg(feature = "postgres")]
-pub mod blocking {
+pub(crate) mod blocking {
     use super::*;
     use postgres::GenericClient;
 
@@ -67,7 +67,7 @@ pub mod blocking {
 }
 
 #[cfg(feature = "tokio-postgres")]
-pub mod async_tracker {
+pub(crate) mod async_tracker {
     use super::*;
     use tokio_postgres::GenericClient;
 

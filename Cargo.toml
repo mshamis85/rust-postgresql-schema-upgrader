@@ -2,6 +2,11 @@
 name = "postgresql-schema-upgrader"
 version = "0.1.0"
 edition = "2024"
+description = "A robust, safety-first library for managing PostgreSQL database schema migrations with both sync and async support."
+repository = "https://github.com/mshamis/rust-postgresql-schema-upgrader"
+license = "MIT"
+keywords = ["postgres", "postgresql", "migration", "schema", "upgrader"]
+categories = ["database"]
 
 [dependencies]
 postgres = { version = "0.19.12", features = ["with-chrono-0_4"], optional = true }

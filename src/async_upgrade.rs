@@ -3,6 +3,15 @@ use crate::SslMode;
 use crate::upgrade_macros::{do_await, run_upgrade_flow};
 use crate::{PostgresUpgraderOptions, UpgraderError};
 
+/// Asynchronously applies schema upgrades from the specified folder to the database.
+///
+/// # Errors
+///
+/// Returns `UpgraderError` if:
+/// - Connection to the database fails.
+/// - Upgrader files cannot be loaded or are invalid.
+/// - An integrity violation is detected.
+/// - Execution of a migration step fails.
 #[cfg(feature = "tokio-postgres")]
 pub async fn upgrade_async(
     upgraders_folder: impl AsRef<std::path::Path>,

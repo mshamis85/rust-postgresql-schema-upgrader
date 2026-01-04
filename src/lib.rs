@@ -1,3 +1,8 @@
+//! # PostgreSQL Schema Upgrader
+//!
+//! A library for managing PostgreSQL database schema migrations with safety and integrity in mind.
+//! It supports both synchronous (blocking) and asynchronous (Tokio) execution modes.
+
 #[cfg(feature = "tokio-postgres")]
 mod async_upgrade;
 #[cfg(feature = "postgres")]

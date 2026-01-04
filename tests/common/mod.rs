@@ -24,7 +24,7 @@ impl PostgresContainer {
 
         // Start Postgres
         let status = Command::new("docker")
-            .args(&[
+            .args([
                 "run",
                 "-d",
                 "--name",
@@ -52,13 +52,13 @@ impl PostgresContainer {
         while attempts < 30 {
             thread::sleep(Duration::from_secs(1));
             let status = Command::new("docker")
-                .args(&["exec", &name, "pg_isready", "-U", "postgres"])
+                .args(["exec", &name, "pg_isready", "-U", "postgres"])
                 .status();
 
-            if let Ok(s) = status {
-                if s.success() {
-                    break;
-                }
+            if let Ok(s) = status
+                && s.success()
+            {
+                break;
             }
             attempts += 1;
         }
@@ -66,7 +66,7 @@ impl PostgresContainer {
         if attempts >= 30 {
             // Cleanup if failed
             Command::new("docker")
-                .args(&["rm", "-f", &name])
+                .args(["rm", "-f", &name])
                 .output()
                 .ok();
             panic!("Postgres container failed to become ready");
@@ -82,7 +82,7 @@ impl PostgresContainer {
 impl Drop for PostgresContainer {
     fn drop(&mut self) {
         Command::new("docker")
-            .args(&["rm", "-f", &self.name])
+            .args(["rm", "-f", &self.name])
             .output()
             .ok();
     }
@@ -135,7 +135,7 @@ impl BlockingTestClient {
         };
         self.client
             .execute(&format!("SELECT * FROM {}", table_ref), &[])
-            .expect(&format!("Table {} should exist", table_ref));
+            .unwrap_or_else(|_| panic!("Table {} should exist", table_ref));
     }
 
     pub fn get_upgraders(&mut self, schema: Option<&str>) -> Vec<TestUpgraderRow> {
@@ -207,7 +207,7 @@ impl AsyncTestClient {
         self.client
             .execute(&format!("SELECT * FROM {}", table_ref), &[])
             .await
-            .expect(&format!("Table {} should exist", table_ref));
+            .unwrap_or_else(|_| panic!("Table {} should exist", table_ref));
     }
 
     pub async fn get_upgraders(&self, schema: Option<&str>) -> Vec<TestUpgraderRow> {
