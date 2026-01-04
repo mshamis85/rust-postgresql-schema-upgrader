@@ -11,6 +11,8 @@ pub struct AppliedUpgrader {
     pub applied_on: DateTime<Utc>,
 }
 
+const ADVISORY_LOCK_ID: i64 = 42_00_42_00; // Arbitrary constant for serialization of CREATE TABLE
+
 fn table_name(schema: Option<&str>) -> String {
     match schema {
         Some(s) => format!("\"{}\".\"$upgraders$\"", s),
@@ -23,10 +25,17 @@ pub mod blocking {
     use super::*;
     use postgres::GenericClient;
 
-    pub fn init_and_lock_table(client: &mut impl GenericClient, schema: Option<&str>) -> Result<(), UpgraderError> {
+    pub fn init_upgraders_table(client: &mut postgres::Client, schema: Option<&str>) -> Result<(), UpgraderError> {
+        let mut transaction = client.transaction()
+             .map_err(|e| UpgraderError::ConnectionError(format!("Failed to start transaction: {}", e)))?;
+
+        // Acquire advisory lock to serialize CREATE TABLE IF NOT EXISTS logic
+        transaction.execute("SELECT pg_advisory_xact_lock($1)", &[&ADVISORY_LOCK_ID])
+             .map_err(|e| UpgraderError::ExecutionError(format!("Failed to acquire advisory lock: {:?}", e)))?;
+
         let table = table_name(schema);
         
-        let create_sql = format!(r#"
+        let create_sql = format!(r#" 
             CREATE TABLE IF NOT EXISTS {} (
                 file_id INT,
                 upgrader_id INT,
@@ -36,15 +45,22 @@ pub mod blocking {
                 PRIMARY KEY (file_id, upgrader_id)
             );
         "#, table);
+        
+        transaction.execute(&create_sql, &[])
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create upgraders table: {:?}", e)))?;
+            
+        transaction.commit()
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to commit transaction: {:?}", e)))?;
 
+        Ok(())
+    }
+
+    pub fn lock_upgraders_table(transaction: &mut postgres::Transaction, schema: Option<&str>) -> Result<(), UpgraderError> {
+        let table = table_name(schema);
         let lock_sql = format!("LOCK TABLE {} IN EXCLUSIVE MODE;", table);
         
-        client.execute(&create_sql, &[])
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create upgraders table: {}", e)))?;
-            
-        client.execute(&lock_sql, &[])
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {}", e)))?;
-
+        transaction.execute(&lock_sql, &[])
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {:?}", e)))?;
         Ok(())
     }
 
@@ -53,7 +69,7 @@ pub mod blocking {
         let select_sql = format!("SELECT file_id, upgrader_id, description, text, applied_on FROM {} ORDER BY file_id, upgrader_id;", table);
 
         let rows = client.query(&select_sql, &[])
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to load applied upgraders: {}", e)))?;
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to load applied upgraders: {:?}", e)))?;
 
         let mut applied = Vec::new();
         for row in rows {
@@ -77,7 +93,7 @@ pub mod blocking {
             &upgrader.upgrader_id,
             &upgrader.description,
             &upgrader.text,
-        ]).map_err(|e| UpgraderError::ExecutionError(format!("Failed to record upgrader {}: {}", upgrader.upgrader_id, e)))?;
+        ]).map_err(|e| UpgraderError::ExecutionError(format!("Failed to record upgrader {}: {:?}", upgrader.upgrader_id, e)))?;
         Ok(())
     }
 }
@@ -87,10 +103,18 @@ pub mod async_tracker {
     use super::*;
     use tokio_postgres::GenericClient;
 
-    pub async fn init_and_lock_table(client: &impl GenericClient, schema: Option<&str>) -> Result<(), UpgraderError> {
+    pub async fn init_upgraders_table(client: &mut tokio_postgres::Client, schema: Option<&str>) -> Result<(), UpgraderError> {
+        let transaction = client.transaction().await
+             .map_err(|e| UpgraderError::ConnectionError(format!("Failed to start transaction: {}", e)))?;
+
+        // Acquire advisory lock to serialize CREATE TABLE IF NOT EXISTS logic
+        transaction.execute("SELECT pg_advisory_xact_lock($1)", &[&ADVISORY_LOCK_ID])
+             .await
+             .map_err(|e| UpgraderError::ExecutionError(format!("Failed to acquire advisory lock: {:?}", e)))?;
+
         let table = table_name(schema);
         
-        let create_sql = format!(r#"
+        let create_sql = format!(r#" 
             CREATE TABLE IF NOT EXISTS {} (
                 file_id INT,
                 upgrader_id INT,
@@ -101,16 +125,23 @@ pub mod async_tracker {
             );
         "#, table);
 
-        let lock_sql = format!("LOCK TABLE {} IN EXCLUSIVE MODE;", table);
-
-        client.execute(&create_sql, &[])
+        transaction.execute(&create_sql, &[])
             .await
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create upgraders table: {}", e)))?;
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to create upgraders table: {:?}", e)))?;
             
-        client.execute(&lock_sql, &[])
-            .await
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {}", e)))?;
+        transaction.commit().await
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to commit transaction: {:?}", e)))?;
 
+        Ok(())
+    }
+
+    pub async fn lock_upgraders_table(transaction: &tokio_postgres::Transaction<'_>, schema: Option<&str>) -> Result<(), UpgraderError> {
+        let table = table_name(schema);
+        let lock_sql = format!("LOCK TABLE {} IN EXCLUSIVE MODE;", table);
+        
+        transaction.execute(&lock_sql, &[])
+            .await
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {:?}", e)))?;
         Ok(())
     }
 
@@ -120,7 +151,7 @@ pub mod async_tracker {
 
         let rows = client.query(&select_sql, &[])
             .await
-            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to load applied upgraders: {}", e)))?;
+            .map_err(|e| UpgraderError::ExecutionError(format!("Failed to load applied upgraders: {:?}", e)))?;
 
         let mut applied = Vec::new();
         for row in rows {
@@ -145,7 +176,7 @@ pub mod async_tracker {
             &upgrader.description,
             &upgrader.text,
         ]).await
-        .map_err(|e| UpgraderError::ExecutionError(format!("Failed to record upgrader {}: {}", upgrader.upgrader_id, e)))?;
+        .map_err(|e| UpgraderError::ExecutionError(format!("Failed to record upgrader {}: {:?}", upgrader.upgrader_id, e)))?;
         Ok(())
     }
 }
