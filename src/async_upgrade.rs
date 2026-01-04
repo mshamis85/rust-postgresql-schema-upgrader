@@ -1,7 +1,7 @@
 #[cfg(feature = "tls")]
 use crate::SslMode;
+use crate::upgrade_macros::{do_await, run_upgrade_flow};
 use crate::{PostgresUpgraderOptions, UpgraderError};
-use crate::upgrade_macros::{run_upgrade_flow, do_await};
 
 #[cfg(feature = "tokio-postgres")]
 pub async fn upgrade_async(

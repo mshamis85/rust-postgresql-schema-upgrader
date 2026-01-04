@@ -1,23 +1,25 @@
 macro_rules! do_await {
-    ($e:expr) => { $e.await }
+    ($e:expr) => {
+        $e.await
+    };
 }
 
 macro_rules! do_sync {
-    ($e:expr) => { $e }
+    ($e:expr) => {
+        $e
+    };
 }
 
 macro_rules! impl_create_schema_if_needed {
-    ($client:ident, $schema:ident, $await_runner:ident) => {
-        {
-            if let Some(schema_name) = $schema {
-                let sql = format!("CREATE SCHEMA IF NOT EXISTS \"{0}\";", schema_name);
-                $await_runner!($client.execute(&sql, &[])).map_err(|e| {
-                    UpgraderError::ExecutionError(format!("Failed to create schema: {:?}", e))
-                })?;
-            }
-            Ok(())
+    ($client:ident, $schema:ident, $await_runner:ident) => {{
+        if let Some(schema_name) = $schema {
+            let sql = format!("CREATE SCHEMA IF NOT EXISTS \"{0}\";", schema_name);
+            $await_runner!($client.execute(&sql, &[])).map_err(|e| {
+                UpgraderError::ExecutionError(format!("Failed to create schema: {:?}", e))
+            })?;
         }
-    }
+        Ok(())
+    }};
 }
 
 macro_rules! impl_init_upgraders_table {
@@ -62,17 +64,15 @@ macro_rules! impl_init_upgraders_table {
 }
 
 macro_rules! impl_lock_upgraders_table {
-    ($transaction:ident, $schema:ident, $await_runner:ident) => {
-        {
-            let table = crate::db_tracker::table_name($schema);
-            let lock_sql = format!("LOCK TABLE {} IN EXCLUSIVE MODE;", table);
+    ($transaction:ident, $schema:ident, $await_runner:ident) => {{
+        let table = crate::db_tracker::table_name($schema);
+        let lock_sql = format!("LOCK TABLE {} IN EXCLUSIVE MODE;", table);
 
-            $await_runner!($transaction.execute(&lock_sql, &[])).map_err(|e| {
-                UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {:?}", e))
-            })?;
-            Ok(())
-        }
-    }
+        $await_runner!($transaction.execute(&lock_sql, &[])).map_err(|e| {
+            UpgraderError::ExecutionError(format!("Failed to lock upgraders table: {:?}", e))
+        })?;
+        Ok(())
+    }};
 }
 
 macro_rules! impl_load_applied_upgraders {
@@ -183,7 +183,7 @@ macro_rules! run_upgrade_flow {
                     // Execute
                     $await_runner!(transaction.batch_execute(&sql))
                         .map_err(|e| UpgraderError::ExecutionError(format!("Failed to execute upgrader {}: {}", upgrader.upgrader_id, e)))?;
-                    
+
                     // Record
                     $await_runner!(record_upgrader($($tx_ref)* transaction, $options.schema.as_deref(), upgrader))?;
 
@@ -203,9 +203,9 @@ macro_rules! run_upgrade_flow {
 
 pub(crate) use do_await;
 pub(crate) use do_sync;
-pub(crate) use run_upgrade_flow;
 pub(crate) use impl_create_schema_if_needed;
 pub(crate) use impl_init_upgraders_table;
-pub(crate) use impl_lock_upgraders_table;
 pub(crate) use impl_load_applied_upgraders;
+pub(crate) use impl_lock_upgraders_table;
 pub(crate) use impl_record_upgrader;
+pub(crate) use run_upgrade_flow;

@@ -1,13 +1,8 @@
 use crate::UpgraderError;
 use crate::schema_loader::SchemaUpgrader;
 use crate::upgrade_macros::{
-    do_await,
-    do_sync,
-    impl_create_schema_if_needed,
-    impl_init_upgraders_table,
-    impl_load_applied_upgraders,
-    impl_lock_upgraders_table,
-    impl_record_upgrader,
+    do_await, do_sync, impl_create_schema_if_needed, impl_init_upgraders_table,
+    impl_load_applied_upgraders, impl_lock_upgraders_table, impl_record_upgrader,
 };
 use chrono::{DateTime, Utc};
 

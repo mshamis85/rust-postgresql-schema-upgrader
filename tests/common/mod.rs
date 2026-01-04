@@ -105,7 +105,9 @@ impl BlockingTestClient {
     }
 
     pub fn execute(&mut self, sql: &str) {
-        self.client.execute(sql, &[]).expect("Failed to execute SQL");
+        self.client
+            .execute(sql, &[])
+            .expect("Failed to execute SQL");
     }
 
     pub fn ensure_schema_exists(&mut self, schema: &str) {

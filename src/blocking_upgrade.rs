@@ -1,7 +1,7 @@
 #[cfg(feature = "tls")]
 use crate::SslMode;
+use crate::upgrade_macros::{do_sync, run_upgrade_flow};
 use crate::{PostgresUpgraderOptions, UpgraderError};
-use crate::upgrade_macros::{run_upgrade_flow, do_sync};
 
 #[cfg(feature = "postgres")]
 pub fn upgrade_blocking(

@@ -1,20 +1,20 @@
-mod error;
-mod options;
-mod tls;
-#[cfg(feature = "postgres")]
-mod blocking_upgrade;
 #[cfg(feature = "tokio-postgres")]
 mod async_upgrade;
-mod schema_loader;
+#[cfg(feature = "postgres")]
+mod blocking_upgrade;
 mod db_tracker;
+mod error;
 mod integrity;
+mod options;
+mod schema_loader;
+mod tls;
 #[macro_use]
 mod upgrade_macros;
 
 pub use error::UpgraderError;
-pub use options::{PostgresUpgraderOptions, PostgresUpgraderOptionsBuilder};
 #[cfg(feature = "tls")]
 pub use options::SslMode;
+pub use options::{PostgresUpgraderOptions, PostgresUpgraderOptionsBuilder};
 
 #[cfg(feature = "postgres")]
 pub use blocking_upgrade::upgrade_blocking;
