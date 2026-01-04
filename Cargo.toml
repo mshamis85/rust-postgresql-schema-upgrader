@@ -1,0 +1,13 @@
+[package]
+name = "postgresql-schema-upgrader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+postgres = { version = "0.19.12", optional = true }
+tokio-postgres = { version = "0.7.15", optional = true }
+tokio = { version = "1", features = ["rt", "macros"], optional = true }
+
+[features]
+postgres = ["dep:postgres"]
+tokio-postgres = ["dep:tokio-postgres", "dep:tokio"]
