@@ -4,6 +4,7 @@ mod tls;
 mod blocking;
 mod async_upgrade;
 mod schema_loader;
+mod db_tracker;
 
 pub use error::UpgraderError;
 pub use options::{PostgresUpgraderOptions, PostgresUpgraderOptionsBuilder};

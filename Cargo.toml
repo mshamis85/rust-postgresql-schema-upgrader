@@ -4,12 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-postgres = { version = "0.19.12", optional = true }
-tokio-postgres = { version = "0.7.15", optional = true }
+postgres = { version = "0.19.12", features = ["with-chrono-0_4"], optional = true }
+tokio-postgres = { version = "0.7.15", features = ["with-chrono-0_4"], optional = true }
 tokio = { version = "1", features = ["rt", "macros"], optional = true }
 tokio-postgres-rustls = { version = "0.13", optional = true }
 rustls = { version = "0.23", optional = true }
 webpki-roots = { version = "0.26", optional = true }
+chrono = { version = "0.4", features = ["serde"] }
 
 [features]
 postgres = ["dep:postgres"]
