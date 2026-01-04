@@ -79,3 +79,59 @@ impl PostgresUpgraderOptionsBuilder {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_defaults() {
+        let options = PostgresUpgraderOptions::builder().build();
+        assert!(options.schema.is_none());
+        assert_eq!(options.create_schema, false);
+        #[cfg(feature = "tls")]
+        assert_eq!(options.ssl_mode, SslMode::Disable);
+    }
+
+    #[test]
+    fn test_builder_custom_values() {
+        let options = PostgresUpgraderOptions::builder()
+            .schema("my_schema")
+            .create_schema(true)
+            .build();
+
+        assert_eq!(options.schema.as_deref(), Some("my_schema"));
+        assert_eq!(options.create_schema, true);
+    }
+
+    #[test]
+    fn test_apply_schema_substitution_no_schema() {
+        let options = PostgresUpgraderOptions::builder().build();
+        let sql = "CREATE TABLE {{SCHEMA}}.test (id INT)";
+        let result = options.apply_schema_substitution(sql);
+        // Should remain unchanged if no schema is provided (or we might want to fail/strip?
+        // Current impl returns as is, which is correct behavior for "no substitution").
+        assert_eq!(result, sql);
+    }
+
+    #[test]
+    fn test_apply_schema_substitution_with_schema() {
+        let options = PostgresUpgraderOptions::builder()
+            .schema("my_schema")
+            .build();
+        let sql = "CREATE TABLE {{SCHEMA}}.test (id INT)";
+        let result = options.apply_schema_substitution(sql);
+        assert_eq!(result, "CREATE TABLE my_schema.test (id INT)");
+    }
+
+    #[test]
+    fn test_apply_schema_substitution_multiple_occurrences() {
+        let options = PostgresUpgraderOptions::builder().schema("public").build();
+        let sql = "SELECT * FROM {{SCHEMA}}.users JOIN {{SCHEMA}}.posts ON ...";
+        let result = options.apply_schema_substitution(sql);
+        assert_eq!(
+            result,
+            "SELECT * FROM public.users JOIN public.posts ON ..."
+        );
+    }
+}

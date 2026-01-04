@@ -107,3 +107,26 @@ pub mod async_tracker {
         impl_record_upgrader!(client, schema, upgrader, do_await)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_table_name_without_schema() {
+        let name = table_name(None);
+        assert_eq!(name, "\"$upgraders$\"");
+    }
+
+    #[test]
+    fn test_table_name_with_schema() {
+        let name = table_name(Some("my_schema"));
+        assert_eq!(name, "\"my_schema\".\"$upgraders$\"");
+    }
+
+    #[test]
+    fn test_table_name_with_public_schema() {
+        let name = table_name(Some("public"));
+        assert_eq!(name, "\"public\".\"$upgraders$\"");
+    }
+}
