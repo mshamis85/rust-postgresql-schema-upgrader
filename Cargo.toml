@@ -24,3 +24,4 @@ uuid = { version = "1.11", features = ["v4"] }
 tokio = { version = "1", features = ["full"] }
 postgres = { version = "0.19.12", features = ["with-chrono-0_4"] }
 tokio-postgres = { version = "0.7.15", features = ["with-chrono-0_4"] }
+port_check = "0.3.0"

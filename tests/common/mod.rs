@@ -2,9 +2,6 @@ use std::process::Command;
 use uuid::Uuid;
 use std::thread;
 use std::time::Duration;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::Path;
 
 pub struct PostgresContainer {
     pub name: String,
@@ -22,12 +19,15 @@ impl PostgresContainer {
         let name = format!("postgres-test-{}", Uuid::new_v4());
         let password = "mysecretpassword";
         
+        // Find a free host port
+        let host_port = port_check::free_local_port().expect("No free ports available");
+
         // Start Postgres
         let status = Command::new("docker")
             .args(&[
                 "run", "-d", "--name", &name, 
                 "-e", &format!("POSTGRES_PASSWORD={}", password),
-                "-P", // Publish all exposed ports to random ports
+                "-p", &format!("{}:5432", host_port),
                 "postgres:18.1"
             ])
             .status()
@@ -36,23 +36,6 @@ impl PostgresContainer {
         if !status.success() {
             panic!("Failed to start postgres container");
         }
-
-        // Get the mapped port
-        // Wait a split second for docker to assign port
-        thread::sleep(Duration::from_millis(500));
-        
-        let output = Command::new("docker")
-            .args(&["port", &name, "5432"])
-            .output()
-            .expect("Failed to get port mapping");
-            
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        // Output format like: 0.0.0.0:32768
-        // We need to parse this. 
-        // Note: It might return multiple bindings (ipv4/ipv6), usually the first line works.
-        let line = stdout.lines().next().expect("No port mapping found");
-        let parts: Vec<&str> = line.trim().split(':').collect();
-        let host_port = parts.last().expect("Failed to parse port").trim();
 
         let connection_string = format!("host=localhost port={} user=postgres password={} dbname=postgres", host_port, password);
         
@@ -94,8 +77,3 @@ impl Drop for PostgresContainer {
     }
 }
 
-pub fn create_dummy_upgrader(folder: &Path, filename: &str, file_id: i32, upgrader_id: i32, sql: &str) {
-    let path = folder.join(filename);
-    let mut f = File::create(path).unwrap();
-    writeln!(f, "--- {}: Description for {}\n{}", upgrader_id, upgrader_id, sql).unwrap();
-}

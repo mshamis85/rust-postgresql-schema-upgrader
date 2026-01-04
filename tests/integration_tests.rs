@@ -1,7 +1,7 @@
 mod common;
 
 use common::PostgresContainer;
-use postgresql_schema_upgrader::{upgrade_blocking, upgrade_async, PostgresUpgraderOptions, SslMode};
+use postgresql_schema_upgrader::{upgrade_blocking, upgrade_async, PostgresUpgraderOptions};
 use postgres::{Client, NoTls};
 use std::sync::{Arc, Barrier};
 use std::thread;
