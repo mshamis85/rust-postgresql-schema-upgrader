@@ -1,20 +1,21 @@
 # PostgreSQL Schema Upgrader
 
-A Rust library for managing PostgreSQL database schema migrations. It supports both synchronous (blocking) and asynchronous (Tokio) execution modes, and handles TLS connections via `rustls`.
+A robust, safety-first Rust library for managing PostgreSQL database schema migrations. It supports both synchronous (blocking) and asynchronous (Tokio) execution modes, handles TLS connections via `rustls`, and enforces strict integrity checks to prevent database corruption.
 
 ## Features
 
-- **Sequential Upgrades:** Applies schema changes in a strictly defined order based on file and upgrader IDs.
+- **Sequential & Atomic:** Applies schema changes in a strictly defined order. Each upgrader step is wrapped in a transaction, ensuring that a failure rolls back the entire step (no partial migrations).
 - **Dual Mode:**
     - **Blocking:** Uses `postgres` crate for synchronous contexts.
     - **Async:** Uses `tokio-postgres` for asynchronous contexts.
-- **TLS Support:** Optional support for secure connections using `rustls` (via the `tls` feature).
+- **Schema Isolation:** Can be configured to run all migrations within a specific PostgreSQL `SCHEMA`, allowing multiple applications to coexist in the same database or providing strict boundary control.
+- **Tamper-Proof History:** Enforces strict immutability. If a previously applied migration file is modified on disk, the upgrader will refuse to run, protecting your production database from inconsistent history.
 - **Strict Validation:** Enforces sequential naming conventions for migration files and upgrader steps to prevent gaps or collisions.
-- **No Type Leaks:** Encapsulates all underlying dependency types, exposing only a clean, minimal API.
+- **TLS Support:** Optional support for secure connections using `rustls`.
 
 ## Installation
 
-Add the dependency to your `Cargo.toml`. Choose the features that match your runtime environment.
+Add the dependency to your `Cargo.toml`.
 
 ### Blocking (Synchronous)
 ```toml
@@ -37,7 +38,7 @@ postgresql-schema-upgrader = { version = "0.1.0", features = ["tokio-postgres", 
 
 ## Directory Structure
 
-The library expects a flat directory containing your migration files. Nested directories are not allowed.
+The library expects a flat directory containing your migration files. Nested directories are not allowed to ensure a linear history.
 
 **Rules:**
 1. **File Naming:** Files must start with a number followed by an underscore (e.g., `000_init.sql`).
@@ -53,7 +54,7 @@ upgraders/
 
 ## Upgrader File Format
 
-Each file can contain multiple upgrader steps. Steps are separated by a header line starting with `--- `.
+Each file can contain multiple upgrader steps. Steps are separated by a header line starting with `--- `. Segregating complex migrations into smaller steps allows for finer-grained control and easier recovery.
 
 **Rules:**
 1. **Header Format:** `--- <ID>: <Description>`
@@ -78,28 +79,41 @@ CREATE TABLE posts (
 CREATE INDEX idx_users_username ON users(username);
 ```
 
-## Upgrader Integrity and Immutability
+## Best Practices & Safety
 
-This library enforces a strict immutability rule for upgraders. Once an upgrader (identified by its `file_id` and `upgrader_id`) has been successfully executed against a database, it is considered **LOCKED**.
+### 1. Immutability is Key
+Once an upgrader (e.g., File 0, Step 1) has been applied to a database, it is **locked**.
+*   **Do not modify** the SQL or description of existing files.
+*   **Do not reorder** files.
+*   **Do not insert** new files in the middle of the history.
 
-If the library detects that the SQL text of a previously executed upgrader has been modified, it will:
-1.  **Refuse to proceed:** No further upgraders will be applied.
-2.  **Return an error:** An error will be returned immediately before any changes are made to the database.
+The library validates the integrity of the migration history on every run. If it detects that a file on disk differs from what was recorded in the database, it will return an error and refuse to proceed. This feature prevents "history rewriting" which can lead to catastrophic drift between environments.
 
-**Best Practice:** Once an upgrader is deployed and run against a database, its content must **NEVER** be changed. If you need to modify the schema further, create a new upgrader step or a new upgrader file.
+### 2. Schema Isolation
+You can confine your application's data to a specific schema. This is highly recommended for microservices sharing a database instance.
+Use the `PostgresUpgraderOptions` builder to set the target schema. The library can also create the schema for you if it doesn't exist.
+
+### 3. Atomic Steps
+Each upgrader step (everything under a `--- ID:` header) is executed in its own transaction. If a step fails (e.g., syntax error), the transaction is rolled back, ensuring your database is never left in a half-migrated state.
 
 ## Usage
 
 ### Blocking Example
 
 ```rust
-use postgresql_schema_upgrader::{upgrade_blocking, SslMode};
+use postgresql_schema_upgrader::{upgrade_blocking, PostgresUpgraderOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let connection_string = "host=localhost user=postgres password=secret dbname=mydb";
     
+    // Configure options
+    let options = PostgresUpgraderOptions::builder()
+        .schema("my_app_schema") // Isolate to this schema
+        .create_schema(true)     // Create it if missing
+        .build();
+
     // Applies upgraders from the "./upgraders" folder
-    upgrade_blocking("./upgraders", connection_string, SslMode::Disable)?;
+    upgrade_blocking("./upgraders", connection_string, &options)?;
     
     println!("Schema upgraded successfully!");
     Ok(())
@@ -109,24 +123,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Async Example
 
 ```rust
-use postgresql_schema_upgrader::{upgrade_async, SslMode};
+use postgresql_schema_upgrader::{upgrade_async, PostgresUpgraderOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let connection_string = "host=localhost user=postgres password=secret dbname=mydb";
     
+    let options = PostgresUpgraderOptions::builder()
+        .schema("my_app_schema")
+        .create_schema(true)
+        .build();
+
     // Applies upgraders from the "./upgraders" folder
-    upgrade_async("./upgraders", connection_string, SslMode::Disable).await?;
+    upgrade_async("./upgraders", connection_string, &options).await?;
     
     println!("Schema upgraded successfully!");
     Ok(())
 }
 ```
 
-### Using TLS
+### With TLS Support
 
-To enforce a secure connection, use `SslMode::Require` (requires the `tls` feature).
+If you have the `tls` feature enabled, you can enforce SSL requirements:
 
 ```rust
-upgrade_async("./upgraders", connection_string, SslMode::Require).await?;
+use postgresql_schema_upgrader::{upgrade_async, PostgresUpgraderOptions, SslMode};
+
+let options = PostgresUpgraderOptions::builder()
+    .ssl_mode(SslMode::Require)
+    .build();
+
+upgrade_async("./upgraders", connection_string, &options).await?;
 ```
