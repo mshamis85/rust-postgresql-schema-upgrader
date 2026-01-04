@@ -299,7 +299,7 @@ define_test_both_modes!(integrity_violation, {
     assert!(result.is_err());
     let err_msg = result.err().unwrap().to_string();
     assert!(
-        err_msg.contains("Integrity violation") || err_msg.contains("SQL content has changed"),
+        err_msg.contains("Integrity error") || err_msg.contains("SQL content has changed"),
         "Unexpected error: {}",
         err_msg
     );

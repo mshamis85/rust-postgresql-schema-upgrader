@@ -36,7 +36,6 @@ pub(crate) fn load_upgraders(
     {
         let entry = entry.map_err(|e| UpgraderError::LoaderError(e.to_string()))?;
         let path = entry.path();
-        println!("DEBUG: Found entry: {:?}", path);
 
         if path.is_dir() {
             return Err(UpgraderError::LoaderError(format!(

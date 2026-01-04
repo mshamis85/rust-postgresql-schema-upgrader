@@ -16,8 +16,8 @@ pub fn verify_integrity(
         if let Some(prev) = prev_applied_on
             && db_u.applied_on < prev
         {
-            return Err(UpgraderError::ExecutionError(format!(
-                "Integrity violation: Upgrader {}:{} was applied at {}, which is before the previous upgrader ({})",
+            return Err(UpgraderError::IntegrityError(format!(
+                "Upgrader {}:{} was applied at {}, which is before the previous upgrader ({})",
                 db_u.file_id, db_u.upgrader_id, db_u.applied_on, prev
             )));
         }
@@ -43,7 +43,7 @@ pub fn verify_integrity(
                     if file_tuple < db_tuple {
                         // File has an upgrader that is "before" the current DB upgrader.
                         // Since we traverse in order, this means the DB skipped this upgrader.
-                        return Err(UpgraderError::ExecutionError(format!(
+                        return Err(UpgraderError::IntegrityError(format!(
                             "Gap detected in database migrations. File upgrader {}:{} is missing in database, but later upgrader {}:{} is present.",
                             file_u.file_id, file_u.upgrader_id, db_u.file_id, db_u.upgrader_id
                         )));
@@ -51,7 +51,7 @@ pub fn verify_integrity(
                         // File tuple > DB tuple.
                         // This means the DB has an upgrader that is "before" the current File upgrader,
                         // but we didn't see it in the Files list (otherwise we would have matched it previously).
-                        return Err(UpgraderError::ExecutionError(format!(
+                        return Err(UpgraderError::IntegrityError(format!(
                             "Database contains an upgrader {}:{} that is missing from the migration files.",
                             db_u.file_id, db_u.upgrader_id
                         )));
@@ -60,15 +60,15 @@ pub fn verify_integrity(
 
                 // 2. Check Content
                 if file_u.text.trim() != db_u.text.trim() {
-                    return Err(UpgraderError::ExecutionError(format!(
-                        "Integrity violation for upgrader {}:{}. SQL content has changed.",
+                    return Err(UpgraderError::IntegrityError(format!(
+                        "Upgrader {}:{}. SQL content has changed.",
                         file_u.file_id, file_u.upgrader_id
                     )));
                 }
 
                 if file_u.description.trim() != db_u.description.trim() {
-                    return Err(UpgraderError::ExecutionError(format!(
-                        "Integrity violation for upgrader {}:{}. Description has changed.\nFile: '{}'\nDB:   '{}'",
+                    return Err(UpgraderError::IntegrityError(format!(
+                        "Upgrader {}:{}. Description has changed.\nFile: '{}'\nDB:   '{}'",
                         file_u.file_id, file_u.upgrader_id, file_u.description, db_u.description
                     )));
                 }
@@ -172,7 +172,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("Description has changed")),
+            UpgraderError::IntegrityError(msg) => assert!(msg.contains("Description has changed")),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -184,7 +184,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
+            UpgraderError::IntegrityError(msg) => assert!(msg.contains("SQL content has changed")),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -200,7 +200,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(
+            UpgraderError::IntegrityError(msg) => assert!(
                 msg.contains("SQL content has changed") || msg.contains("Description has changed")
             ),
             _ => panic!("Unexpected error type"),
@@ -227,7 +227,7 @@ mod tests {
         // It compares (1,0) from files with (0,1) from DB.
         // (1,0) > (0,1). So DB has an upgrader "before" the current file upgrader.
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains(
+            UpgraderError::IntegrityError(msg) => assert!(msg.contains(
                 "Database contains an upgrader 0:1 that is missing from the migration files"
             )),
             _ => panic!("Unexpected error type"),
@@ -245,7 +245,7 @@ mod tests {
         let err = verify_integrity(&files, &db).unwrap_err();
         // (1,0) > (0,0). DB has earlier upgrader.
         match err {
-            UpgraderError::ExecutionError(msg) => {
+            UpgraderError::IntegrityError(msg) => {
                 assert!(msg.contains("Database contains an upgrader 0:0 that is missing"))
             }
             _ => panic!("Unexpected error type"),
@@ -263,7 +263,7 @@ mod tests {
         let err = verify_integrity(&files, &db).unwrap_err();
         // (0,1) > (0,0)
         match err {
-            UpgraderError::ExecutionError(msg) => {
+            UpgraderError::IntegrityError(msg) => {
                 assert!(msg.contains("Database contains an upgrader 0:0 that is missing"))
             }
             _ => panic!("Unexpected error type"),
@@ -284,7 +284,7 @@ mod tests {
         // Mismatch at (0,0). Content differs.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(
+            UpgraderError::IntegrityError(msg) => assert!(
                 msg.contains("SQL content has changed") || msg.contains("Description has changed")
             ),
             _ => panic!("Unexpected error type"),
@@ -310,7 +310,7 @@ mod tests {
         // At 0:1, content mismatch.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(
+            UpgraderError::IntegrityError(msg) => assert!(
                 msg.contains("SQL content has changed") || msg.contains("Description has changed")
             ),
             _ => panic!("Unexpected error type"),
@@ -337,7 +337,7 @@ mod tests {
         // (0,1) < (0,2). File is "earlier". Means DB skipped it.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(
+            UpgraderError::IntegrityError(msg) => assert!(
                 msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")
             ),
             _ => panic!("Unexpected error type"),
@@ -375,7 +375,7 @@ mod tests {
         // (0,1) < (1,0). Gap detected.
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(
+            UpgraderError::IntegrityError(msg) => assert!(
                 msg.contains("Gap detected in database migrations. File upgrader 0:1 is missing")
             ),
             _ => panic!("Unexpected error type"),
@@ -412,7 +412,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
+            UpgraderError::IntegrityError(msg) => assert!(msg.contains("SQL content has changed")),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -424,7 +424,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => assert!(msg.contains("SQL content has changed")),
+            UpgraderError::IntegrityError(msg) => assert!(msg.contains("SQL content has changed")),
             _ => panic!("Unexpected error type"),
         }
     }
@@ -447,7 +447,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => {
+            UpgraderError::IntegrityError(msg) => {
                 assert!(msg.contains("File upgrader 0:1 is missing"))
             }
             _ => panic!("Unexpected error type"),
@@ -473,7 +473,7 @@ mod tests {
         // File has (0,2). DB has (0,1).
         // (0,2) > (0,1). Means DB has something "earlier".
         match err {
-            UpgraderError::ExecutionError(msg) => {
+            UpgraderError::IntegrityError(msg) => {
                 assert!(msg.contains("Database contains an upgrader 0:1 that is missing"))
             }
             _ => panic!("Unexpected error type"),
@@ -494,7 +494,7 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => {
+            UpgraderError::IntegrityError(msg) => {
                 assert!(msg.contains("Database contains an upgrader 1:0 that is missing"))
             }
             _ => panic!("Unexpected error type"),
@@ -533,8 +533,8 @@ mod tests {
 
         let err = verify_integrity(&files, &db).unwrap_err();
         match err {
-            UpgraderError::ExecutionError(msg) => {
-                assert!(msg.contains("Integrity violation") && msg.contains("applied at"))
+            UpgraderError::IntegrityError(msg) => {
+                assert!(msg.contains("Upgrader 0:1 was applied at"))
             }
             _ => panic!("Unexpected error type"),
         }

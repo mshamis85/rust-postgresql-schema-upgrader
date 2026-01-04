@@ -32,7 +32,7 @@ pub async fn upgrade_async(
 
             tokio::spawn(async move {
                 if let Err(_e) = connection.await {
-                    // Log error
+                    // Connection error will be detected by the client on next query
                 }
             });
             client
@@ -45,7 +45,7 @@ pub async fn upgrade_async(
 
             tokio::spawn(async move {
                 if let Err(_e) = connection.await {
-                    // Log error
+                    // Connection error will be detected by the client on next query
                 }
             });
             client

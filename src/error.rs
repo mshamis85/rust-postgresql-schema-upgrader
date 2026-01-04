@@ -4,6 +4,7 @@ pub enum UpgraderError {
     ExecutionError(String),
     ConfigurationError(String),
     LoaderError(String),
+    IntegrityError(String),
 }
 
 impl std::fmt::Display for UpgraderError {
@@ -13,6 +14,7 @@ impl std::fmt::Display for UpgraderError {
             UpgraderError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
             UpgraderError::ConfigurationError(msg) => write!(f, "Configuration error: {}", msg),
             UpgraderError::LoaderError(msg) => write!(f, "Loader error: {}", msg),
+            UpgraderError::IntegrityError(msg) => write!(f, "Integrity error: {}", msg),
         }
     }
 }
