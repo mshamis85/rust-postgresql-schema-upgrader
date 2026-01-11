@@ -1,9 +1,11 @@
 [package]
 name = "postgresql-schema-upgrader"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "A robust, safety-first library for managing PostgreSQL database schema migrations with both sync and async support."
-repository = "https://github.com/mshamis/rust-postgresql-schema-upgrader"
+repository = "https://github.com/mshamis85/rust-postgresql-schema-upgrader"
+documentation = "https://docs.rs/postgresql-schema-upgrader"
+homepage = "https://github.com/mshamis85/rust-postgresql-schema-upgrader"
 license = "MIT"
 keywords = ["postgres", "postgresql", "migration", "schema", "upgrader"]
 categories = ["database"]
